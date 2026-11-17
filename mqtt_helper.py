@@ -1,40 +1,55 @@
-import urllib.request
-import json
+import paho.mqtt.client as mqtt
 import streamlit as st
+import queue
+import uuid
 
-URL_CMD = "https://ntfy.sh/miguel_whackaled_cmd_2026"
-URL_RES = "https://ntfy.sh/miguel_whackaled_res_2026/json?poll=1&since=30s"
+BROKER = "broker.hivemq.com"
+PORT = 1883
+TOPIC_CMD = "miguel_whackaled_2026/comando"
+TOPIC_RES = "miguel_whackaled_2026/resultado"
 
 def init_mqtt():
-    if "ultimo_res_id" not in st.session_state:
-        st.session_state.ultimo_res_id = ""
+    if "mqtt_client" not in st.session_state:
+        msg_queue = queue.Queue(maxsize=10)
+        
+        def on_connect(client, userdata, flags, rc):
+            if rc == 0:
+                client.subscribe(TOPIC_RES)
+
+        def on_message(client, userdata, msg):
+            payload = msg.payload.decode("utf-8").strip()
+            if msg_queue.full():
+                try:
+                    msg_queue.get_nowait()
+                except queue.Empty:
+                    pass
+            msg_queue.put(payload)
+
+        client = mqtt.Client(client_id=f"Streamlit-Miguel-{uuid.uuid4().hex[:8]}")
+        client.on_connect = on_connect
+        client.on_message = on_message
+        client.connect(BROKER, PORT, 60)
+        client.loop_start()
+
+        st.session_state.mqtt_client = client
+        st.session_state.mqtt_queue = msg_queue
+
+def limpiar_cola():
+    init_mqtt()
+    while not st.session_state.mqtt_queue.empty():
+        try:
+            st.session_state.mqtt_queue.get_nowait()
+        except queue.Empty:
+            break
 
 def enviar_comando(comando: str):
     init_mqtt()
-    try:
-        req = urllib.request.Request(
-            URL_CMD,
-            data=comando.encode("utf-8"),
-            method="POST"
-        )
-        urllib.request.urlopen(req, timeout=3)
-    except Exception as e:
-        st.error(f"Error enviando orden a Wokwi: {e}")
+    if comando.startswith("LED:"):
+        limpiar_cola()
+    st.session_state.mqtt_client.publish(TOPIC_CMD, comando)
 
 def leer_resultado():
     init_mqtt()
-    try:
-        req = urllib.request.urlopen(URL_RES, timeout=3)
-        lineas = req.read().decode("utf-8").strip().split("\n")
-        for linea in reversed(lineas):
-            if not linea.strip():
-                continue
-            data = json.loads(linea)
-            msg_id = data.get("id", "")
-            mensaje = data.get("message", "").strip()
-            if ":" in mensaje and msg_id != st.session_state.ultimo_res_id:
-                st.session_state.ultimo_res_id = msg_id
-                return mensaje
-    except Exception:
-        pass
+    if not st.session_state.mqtt_queue.empty():
+        return st.session_state.mqtt_queue.get()
     return None
