@@ -1,6 +1,10 @@
 import streamlit as st
 import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 import numpy as np
+import urllib.request
+import os
 from PIL import Image
 from mqtt_helper import init_mqtt, enviar_comando
 
@@ -15,36 +19,45 @@ if "puntaje_total" not in st.session_state:
 st.title("🕹️ Whack-a-LED / Topo IoT")
 st.markdown("Sistema multimodal conectado en tiempo real con **Wokwi (ESP32)** vía MQTT.")
 
+# Descargar y cargar el modelo oficial FaceLandmarker de MediaPipe
+@st.cache_resource
+def cargar_detector():
+    modelo = "face_landmarker.task"
+    if not os.path.exists(modelo):
+        url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+        urllib.request.urlretrieve(url, modelo)
+    
+    base_options = python.BaseOptions(model_asset_path=modelo)
+    options = vision.FaceLandmarkerOptions(
+        base_options=base_options,
+        output_face_blendshapes=True,
+        num_faces=1
+    )
+    return vision.FaceLandmarker.create_from_options(options)
+
+detector = cargar_detector()
+
 st.subheader("Paso 1: Desbloqueo Biométrico 😊")
 st.info("Tómate una foto sonriendo para desbloquear el tablero en Wokwi y habilitar los modos de juego.")
 
 foto = st.camera_input("Activa tu cámara y sonríe")
 
 def detectar_sonrisa(imagen_pil):
-    mp_face_mesh = mp.solutions.face_mesh
     img_np = np.array(imagen_pil.convert("RGB"))
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_np)
+    resultado = detector.detect(mp_image)
     
-    with mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True) as face_mesh:
-        resultados = face_mesh.process(img_np)
-        if not resultados.multi_face_landmarks:
-            return False, "No se detectó ningún rostro en la foto."
-        
-        puntos = resultados.multi_face_landmarks[0].landmark
-        # Puntos clave del rostro: comisuras de labios (61 y 291) y ancho de mejillas (234 y 454)
-        izq_boca = puntos[61]
-        der_boca = puntos[291]
-        izq_cara = puntos[234]
-        der_cara = puntos[454]
-        
-        ancho_boca = abs(der_boca.x - izq_boca.x)
-        ancho_cara = abs(der_cara.x - izq_cara.x)
-        proporcion = ancho_boca / ancho_cara
-        
-        # Cuando una persona sonríe, el ancho de la boca supera el 42% del ancho del rostro
-        if proporcion > 0.42:
-            return True, f"¡Sonrisa detectada! (Índice de expresión: {proporcion:.2f})"
-        else:
-            return False, f"Rostro detectado, pero parece serio (Índice: {proporcion:.2f}). ¡Sonríe más!"
+    if not resultado.face_blendshapes:
+        return False, "No se detectó ningún rostro en la foto. Acércate un poco más a la cámara."
+    
+    # MediaPipe calcula directamente el nivel de sonrisa (mouthSmileLeft y mouthSmileRight) de 0.0 a 1.0
+    blendshapes = {b.category_name: b.score for b in resultado.face_blendshapes[0]}
+    nivel_sonrisa = (blendshapes.get("mouthSmileLeft", 0) + blendshapes.get("mouthSmileRight", 0)) / 2
+    
+    if nivel_sonrisa > 0.35:
+        return True, f"¡Sonrisa detectada! (Nivel de felicidad: {nivel_sonrisa*100:.0f}%)"
+    else:
+        return False, f"Rostro detectado, pero parece serio ({nivel_sonrisa*100:.0f}%). ¡Sonríe más!"
 
 if foto is not None:
     img = Image.open(foto)
