@@ -1,8 +1,6 @@
 import streamlit as st
-import cv2
+import mediapipe as mp
 import numpy as np
-import urllib.request
-import os
 from PIL import Image
 from mqtt_helper import init_mqtt, enviar_comando
 
@@ -17,49 +15,49 @@ if "puntaje_total" not in st.session_state:
 st.title("🕹️ Whack-a-LED / Topo IoT")
 st.markdown("Sistema multimodal conectado en tiempo real con **Wokwi (ESP32)** vía MQTT.")
 
-# Descargar clasificadores Haar si no existen localmente (evita el error de cv2.data)
-@st.cache_resource
-def cargar_clasificadores():
-    base_url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/"
-    archivos = {
-        "face": "haarcascade_frontalface_default.xml",
-        "smile": "haarcascade_smile.xml"
-    }
-    for clave, nombre in archivos.items():
-        if not os.path.exists(nombre):
-            urllib.request.urlretrieve(base_url + nombre, nombre)
-    return cv2.CascadeClassifier(archivos["face"]), cv2.CascadeClassifier(archivos["smile"])
-
-face_cascade, smile_cascade = cargar_clasificadores()
-
 st.subheader("Paso 1: Desbloqueo Biométrico 😊")
 st.info("Tómate una foto sonriendo para desbloquear el tablero en Wokwi y habilitar los modos de juego.")
 
 foto = st.camera_input("Activa tu cámara y sonríe")
 
+def detectar_sonrisa(imagen_pil):
+    mp_face_mesh = mp.solutions.face_mesh
+    img_np = np.array(imagen_pil.convert("RGB"))
+    
+    with mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True) as face_mesh:
+        resultados = face_mesh.process(img_np)
+        if not resultados.multi_face_landmarks:
+            return False, "No se detectó ningún rostro en la foto."
+        
+        puntos = resultados.multi_face_landmarks[0].landmark
+        # Puntos clave del rostro: comisuras de labios (61 y 291) y ancho de mejillas (234 y 454)
+        izq_boca = puntos[61]
+        der_boca = puntos[291]
+        izq_cara = puntos[234]
+        der_cara = puntos[454]
+        
+        ancho_boca = abs(der_boca.x - izq_boca.x)
+        ancho_cara = abs(der_cara.x - izq_cara.x)
+        proporcion = ancho_boca / ancho_cara
+        
+        # Cuando una persona sonríe, el ancho de la boca supera el 42% del ancho del rostro
+        if proporcion > 0.42:
+            return True, f"¡Sonrisa detectada! (Índice de expresión: {proporcion:.2f})"
+        else:
+            return False, f"Rostro detectado, pero parece serio (Índice: {proporcion:.2f}). ¡Sonríe más!"
+
 if foto is not None:
     img = Image.open(foto)
-    img_np = np.array(img)
-    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    sonrisa_ok, mensaje = detectar_sonrisa(img)
 
-    rostros = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
-    sonrisa_detectada = False
-
-    for (x, y, w, h) in rostros:
-        roi_gray = gray[y:y+h, x:x+w]
-        sonrisas = smile_cascade.detectMultiScale(roi_gray, scaleFactor=1.7, minNeighbors=20)
-        if len(sonrisas) > 0:
-            sonrisa_detectada = True
-            break
-
-    if sonrisa_detectada:
+    if sonrisa_ok:
         st.session_state.desbloqueado = True
         enviar_comando("UNLOCK")
-        st.success("¡Sonrisa detectada! Tablero Wokwi desbloqueado. Selecciona un ambiente en el menú lateral izquierdo.")
+        st.success(f"{mensaje} Tablero Wokwi desbloqueado.")
     else:
         st.session_state.desbloqueado = False
         enviar_comando("LOCK")
-        st.warning("No detectamos una sonrisa clara. ¡Inténtalo de nuevo sonriendo ampliamente!")
+        st.warning(mensaje)
 
 st.divider()
 
