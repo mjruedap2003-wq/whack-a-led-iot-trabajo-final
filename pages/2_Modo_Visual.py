@@ -1,6 +1,6 @@
 import streamlit as st
 import random
-from mqtt_helper import enviar_comando, leer_boton
+from mqtt_helper import enviar_comando, leer_resultado
 from ui_arcade import aplicar_estilo_arcade, banner_arcade
 
 st.set_page_config(page_title="Level 2: Modo Visual", page_icon="🖼️", layout="centered")
@@ -10,7 +10,7 @@ if not st.session_state.get("desbloqueado", False):
     st.warning("⚠️ SYSTEM LOCKED: Ve a la pantalla principal y haz Pulgar Arriba 👍.")
     st.stop()
 
-banner_arcade("LEVEL 2 • VISUAL MATCH ARENA")
+banner_arcade("LEVEL 2 • RÁFAGA VISUAL DE 3 SEGUNDOS")
 st.title("MODO VISUAL")
 
 ELEMENTOS = [
@@ -27,11 +27,11 @@ if "puntos_visual" not in st.session_state:
 
 col1, col2 = st.columns(2)
 col1.metric("SCORE", f"{st.session_state.puntos_visual:04d}")
-col2.metric("MULTIPLICADOR", "x1.5 PTS")
+col2.metric("VALOR POR CLIC", "15 PTS")
 
-if st.button("🎲 LANZAR NUEVO RETO A WOKWI"):
+if st.button("🎲 LANZAR RETO DE 3 SEGUNDOS A WOKWI"):
     st.session_state.objetivo_visual = random.choice(ELEMENTOS)
-    enviar_comando("ALL_ON")
+    enviar_comando(f"LED:{st.session_state.objetivo_visual['idx']}")
     st.rerun()
 
 obj = st.session_state.objetivo_visual
@@ -39,7 +39,7 @@ st.markdown(f"""
 <div style="background: linear-gradient(145deg, {obj['color']}25, #0d0f24); border: 3px solid {obj['color']}; border-radius: 18px; padding: 30px; text-align: center; box-shadow: 0 0 30px {obj['color']}66; margin: 15px 0;">
     <div style="font-size: 85px; line-height: 1.1; filter: drop-shadow(0 0 15px {obj['color']});">{obj['icono']}</div>
     <h2 style="color: {obj['color']} !important; margin: 15px 0 5px 0;">{obj['nombre']}</h2>
-    <p style="color: #cbd5e1; margin: 0;">Golpea el botón correspondiente en el tablero Wokwi</p>
+    <p style="color: #cbd5e1; margin: 0;">¡Tienes <b>3 segundos</b> en Wokwi para darle todos los clics posibles!</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -49,17 +49,16 @@ with st.expander("👾 Personalizar Skin del Topo (Subir Imagen)"):
         st.image(avatar, caption="SKIN EQUIPADA", width=140)
 
 st.divider()
-if st.button("✅ VALIDAR BOTÓN PRESIONADO"):
-    btn = leer_boton()
-    if btn is not None:
-        if int(btn) == obj["idx"]:
-            st.session_state.puntos_visual += 15
-            enviar_comando("HIT")
+if st.button("✅ RECOGER PUNTAJE DE LA RONDA"):
+    res = leer_resultado()
+    if res is not None and ":" in res:
+        color_idx, clicks = map(int, res.split(":"))
+        ganados = clicks * 15
+        st.session_state.puntos_visual += ganados
+        if clicks > 0:
             st.balloons()
-            st.success(f"💥 ¡COMBO PERFECTO! {obj['icono']} asociado correctamente (+15 PTS)")
-            st.session_state.objetivo_visual = random.choice(ELEMENTOS)
+            st.success(f"💥 ¡COMBO DE {clicks} CLICS en 3 segundos! (+{ganados} PTS)")
         else:
-            enviar_comando("MISS")
-            st.error(f"❌ ERROR DE ASOCIACIÓN: Pulsaste el botón #{int(btn)+1}, pero tocaba {obj['nombre']}.")
+            st.warning("⏱️ 0 clics registrados en los 3 segundos. ¡Lanza otro reto!")
     else:
-        st.info("Presiona primero el botón físico en Wokwi y luego valida aquí.")
+        st.info("Lanza un reto, haz todos los clics que puedas en Wokwi durante 3 segundos y luego recoge tu puntaje.")
