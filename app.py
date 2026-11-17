@@ -1,6 +1,8 @@
 import streamlit as st
 import cv2
 import numpy as np
+import urllib.request
+import os
 from PIL import Image
 from mqtt_helper import init_mqtt, enviar_comando
 
@@ -15,9 +17,20 @@ if "puntaje_total" not in st.session_state:
 st.title("🕹️ Whack-a-LED / Topo IoT")
 st.markdown("Sistema multimodal conectado en tiempo real con **Wokwi (ESP32)** vía MQTT.")
 
-# Detector ligero de rostro y sonrisa de OpenCV
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_smile.xml")
+# Descargar clasificadores Haar si no existen localmente (evita el error de cv2.data)
+@st.cache_resource
+def cargar_clasificadores():
+    base_url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/"
+    archivos = {
+        "face": "haarcascade_frontalface_default.xml",
+        "smile": "haarcascade_smile.xml"
+    }
+    for clave, nombre in archivos.items():
+        if not os.path.exists(nombre):
+            urllib.request.urlretrieve(base_url + nombre, nombre)
+    return cv2.CascadeClassifier(archivos["face"]), cv2.CascadeClassifier(archivos["smile"])
+
+face_cascade, smile_cascade = cargar_clasificadores()
 
 st.subheader("Paso 1: Desbloqueo Biométrico 😊")
 st.info("Tómate una foto sonriendo para desbloquear el tablero en Wokwi y habilitar los modos de juego.")
