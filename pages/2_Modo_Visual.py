@@ -10,7 +10,7 @@ if not st.session_state.get("desbloqueado", False):
     st.warning("⚠️ SYSTEM LOCKED: Ve a la pantalla principal y haz Pulgar Arriba 👍.")
     st.stop()
 
-banner_arcade("LEVEL 2 • RÁFAGA VISUAL DE 3 SEGUNDOS")
+banner_arcade("LEVEL 2 • RÁFAGA VISUAL ACUMULATIVA")
 st.title("MODO VISUAL")
 
 ELEMENTOS = [
@@ -24,10 +24,15 @@ if "objetivo_visual" not in st.session_state:
     st.session_state.objetivo_visual = random.choice(ELEMENTOS)
 if "puntos_visual" not in st.session_state:
     st.session_state.puntos_visual = 0
+if "puntaje_total" not in st.session_state:
+    st.session_state.puntaje_total = 0
+if "historial_visual" not in st.session_state:
+    st.session_state.historial_visual = []
 
-col1, col2 = st.columns(2)
-col1.metric("SCORE", f"{st.session_state.puntos_visual:04d}")
-col2.metric("VALOR POR CLIC", "15 PTS")
+col1, col2, col3 = st.columns(3)
+col1.metric("SCORE VISUAL", f"{st.session_state.puntos_visual:04d}")
+col2.metric("SCORE GLOBAL", f"{st.session_state.puntaje_total:04d}")
+col3.metric("VALOR CLIC", "15 PTS")
 
 if st.button("🎲 LANZAR RETO DE 3 SEGUNDOS A WOKWI"):
     st.session_state.objetivo_visual = random.choice(ELEMENTOS)
@@ -49,16 +54,32 @@ with st.expander("👾 Personalizar Skin del Topo (Subir Imagen)"):
         st.image(avatar, caption="SKIN EQUIPADA", width=140)
 
 st.divider()
-if st.button("✅ RECOGER PUNTAJE DE LA RONDA"):
+if st.button("✅ SUMAR PUNTAJE DE LA RONDA"):
     res = leer_resultado()
     if res is not None and ":" in res:
         color_idx, clicks = map(int, res.split(":"))
         ganados = clicks * 15
+        
         st.session_state.puntos_visual += ganados
+        st.session_state.puntaje_total += ganados
+        
+        el_info = ELEMENTOS[color_idx]
+        st.session_state.historial_visual.append(f"{el_info['icono']} {el_info['nombre']}: {clicks} clics (+{ganados} pts)")
+        
         if clicks > 0:
             st.balloons()
-            st.success(f"💥 ¡COMBO DE {clicks} CLICS en 3 segundos! (+{ganados} PTS)")
+            st.success(f"💥 +{ganados} PTS sumados ({clicks} clics). ¡Total acumulado: {st.session_state.puntos_visual} PTS!")
         else:
             st.warning("⏱️ 0 clics registrados en los 3 segundos. ¡Lanza otro reto!")
+        st.rerun()
     else:
-        st.info("Lanza un reto, haz todos los clics que puedas en Wokwi durante 3 segundos y luego recoge tu puntaje.")
+        st.info("Lanza un reto, haz todos los clics que puedas en Wokwi durante 3 segundos y luego suma tu puntaje.")
+
+if st.session_state.historial_visual:
+    with st.expander("📜 Historial de rondas acumuladas", expanded=True):
+        for item in reversed(st.session_state.historial_visual):
+            st.write(item)
+        if st.button("🔄 Reiniciar marcador de Modo Visual"):
+            st.session_state.puntos_visual = 0
+            st.session_state.historial_visual = []
+            st.rerun()
