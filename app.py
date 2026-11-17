@@ -1,11 +1,11 @@
-import streamlit as st
-import mediapipe as mp
-from mediapipe.tasks import python
-from mediapipe.tasks.python import vision
-import numpy as np
-import urllib.request
 import os
-from PIL import Image
+# Forzar compatibilidad de Keras para modelos exportados desde Teachable Machine
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
+import streamlit as st
+import numpy as np
+from PIL import Image, ImageOps
+import tf_keras as keras
 from mqtt_helper import init_mqtt, enviar_comando
 
 st.set_page_config(page_title="Whack-a-LED IoT", page_icon="🕹️", layout="centered")
@@ -13,64 +13,61 @@ init_mqtt()
 
 if "desbloqueado" not in st.session_state:
     st.session_state.desbloqueado = False
-if "puntaje_total" not in st.session_state:
-    st.session_state.puntaje_total = 0
 
 st.title("🕹️ Whack-a-LED / Topo IoT")
 st.markdown("Sistema multimodal conectado en tiempo real con **Wokwi (ESP32)** vía MQTT.")
 
-# Descargar y cargar el modelo oficial FaceLandmarker de MediaPipe
+# Cargar modelo y etiquetas de Teachable Machine una sola vez
 @st.cache_resource
-def cargar_detector():
-    modelo = "face_landmarker.task"
-    if not os.path.exists(modelo):
-        url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-        urllib.request.urlretrieve(url, modelo)
-    
-    base_options = python.BaseOptions(model_asset_path=modelo)
-    options = vision.FaceLandmarkerOptions(
-        base_options=base_options,
-        output_face_blendshapes=True,
-        num_faces=1
-    )
-    return vision.FaceLandmarker.create_from_options(options)
+def cargar_modelo_tm():
+    modelo = keras.models.load_model("keras_model.h5", compile=False)
+    with open("labels.txt", "r", encoding="utf-8") as f:
+        etiquetas = [line.strip() for line in f.readlines()]
+    return modelo, etiquetas
 
-detector = cargar_detector()
+try:
+    modelo, etiquetas = cargar_modelo_tm()
+except Exception as e:
+    st.error(f"Error cargando keras_model.h5 o labels.txt. Verifica que estén en la raíz de GitHub. Detalle: {e}")
+    st.stop()
 
 st.subheader("Paso 1: Desbloqueo Biométrico 😊")
-st.info("Tómate una foto sonriendo para desbloquear el tablero en Wokwi y habilitar los modos de juego.")
+st.info("Tómate una foto sonriendo (modelo entrenado en Teachable Machine) para desbloquear el tablero en Wokwi.")
 
 foto = st.camera_input("Activa tu cámara y sonríe")
 
-def detectar_sonrisa(imagen_pil):
-    img_np = np.array(imagen_pil.convert("RGB"))
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_np)
-    resultado = detector.detect(mp_image)
+def predecir_expresion(imagen_pil):
+    # Teachable Machine requiere imágenes RGB de 224x224 normalizadas entre -1 y 1
+    size = (224, 224)
+    image = ImageOps.fit(imagen_pil.convert("RGB"), size, Image.Resampling.LANCZOS)
+    image_array = np.asarray(image)
+    normalized_image_array = (image_array.astype(np.float32) / 127.5) - 1.0
+
+    data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
+    data[0] = normalized_image_array
+
+    prediccion = modelo.predict(data, verbose=0)
+    indice = int(np.argmax(prediccion))
+    clase_raw = etiquetas[indice]
+    confianza = float(prediccion[0][indice])
     
-    if not resultado.face_blendshapes:
-        return False, "No se detectó ningún rostro en la foto. Acércate un poco más a la cámara."
-    
-    # MediaPipe calcula directamente el nivel de sonrisa (mouthSmileLeft y mouthSmileRight) de 0.0 a 1.0
-    blendshapes = {b.category_name: b.score for b in resultado.face_blendshapes[0]}
-    nivel_sonrisa = (blendshapes.get("mouthSmileLeft", 0) + blendshapes.get("mouthSmileRight", 0)) / 2
-    
-    if nivel_sonrisa > 0.35:
-        return True, f"¡Sonrisa detectada! (Nivel de felicidad: {nivel_sonrisa*100:.0f}%)"
-    else:
-        return False, f"Rostro detectado, pero parece serio ({nivel_sonrisa*100:.0f}%). ¡Sonríe más!"
+    # Limpiar el número inicial de labels.txt (ej. "0 Feliz" -> "Feliz")
+    nombre_clase = clase_raw.split(" ", 1)[1] if " " in clase_raw else clase_raw
+    return nombre_clase, confianza
 
 if foto is not None:
     img = Image.open(foto)
-    sonrisa_ok, mensaje = detectar_sonrisa(img)
+    clase_detectada, confianza = predecir_expresion(img)
 
-    if sonrisa_ok:
+    # Verifica si la clase ganadora es "Feliz" (sin importar mayúsculas/minúsculas) con al menos 70% de confianza
+    if "feliz" in clase_detectada.lower() and confianza >= 0.70:
         st.session_state.desbloqueado = True
         enviar_comando("UNLOCK")
-        st.success(f"{mensaje} Tablero Wokwi desbloqueado.")
+        st.success(f"¡Expresión detectada: **{clase_detectada}** ({confianza*100:.1f}%)! Tablero Wokwi desbloqueado.")
     else:
         st.session_state.desbloqueado = False
         enviar_comando("LOCK")
-        st.warning(mensaje)
+        st.warning(f"Detectado: **{clase_detectada}** ({confianza*100:.1f}%). Necesitas sonreír para desbloquear.")
 
 st.divider()
 
