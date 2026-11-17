@@ -24,6 +24,34 @@ def aplicar_estilo_arcade():
         box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
     }
 
+    /* Enlaces de navegación lateral en VERDE NEÓN BRILLANTE */
+    [data-testid="stSidebarNav"] a span {
+        color: #39ff14 !important;
+        font-family: 'Orbitron', sans-serif !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+        text-shadow: 0 0 8px rgba(57, 255, 20, 0.75);
+        letter-spacing: 1px;
+    }
+
+    /* Pestaña activa y efecto hover en el menú lateral */
+    [data-testid="stSidebarNav"] a {
+        border: 1px solid rgba(57, 255, 20, 0.25);
+        border-radius: 8px;
+        margin-bottom: 6px;
+        transition: all 0.2s ease;
+    }
+    [data-testid="stSidebarNav"] a:hover {
+        background-color: rgba(57, 255, 20, 0.15) !important;
+        border-color: #39ff14 !important;
+        box-shadow: 0 0 12px rgba(57, 255, 20, 0.5);
+    }
+    [data-testid="stSidebarNav"] a[aria-current="page"] {
+        background-color: rgba(57, 255, 20, 0.2) !important;
+        border: 1.5px solid #39ff14 !important;
+        box-shadow: 0 0 15px rgba(57, 255, 20, 0.6);
+    }
+
     /* Títulos estilo Arcade 8-bit */
     h1 {
         font-family: 'Press Start 2P', cursive !important;
