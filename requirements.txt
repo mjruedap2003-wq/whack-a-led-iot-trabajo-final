@@ -1,6 +1,6 @@
 streamlit
 paho-mqtt
-opencv-python-headless
+mediapipe
 numpy
 Pillow
 SpeechRecognition
