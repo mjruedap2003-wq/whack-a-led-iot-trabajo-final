@@ -2,6 +2,7 @@ import paho.mqtt.client as mqtt
 import streamlit as st
 import queue
 import uuid
+import time
 
 BROKER = "broker.hivemq.com"
 PORT = 1883
@@ -9,7 +10,7 @@ TOPIC_CMD = "miguel_whackaled_2026/comando"
 TOPIC_RES = "miguel_whackaled_2026/resultado"
 
 def init_mqtt():
-    if "mqtt_client" not in st.session_state:
+    if "mqtt_client" not in st.session_state or not st.session_state.mqtt_client.is_connected():
         msg_queue = queue.Queue(maxsize=10)
         
         def on_connect(client, userdata, flags, rc):
@@ -31,6 +32,11 @@ def init_mqtt():
         client.connect(BROKER, PORT, 60)
         client.loop_start()
 
+        # Esperar hasta 2 segundos a que la conexión TCP/MQTT esté realmente activa
+        inicio = time.time()
+        while not client.is_connected() and (time.time() - inicio) < 2.0:
+            time.sleep(0.1)
+
         st.session_state.mqtt_client = client
         st.session_state.mqtt_queue = msg_queue
 
@@ -46,7 +52,9 @@ def enviar_comando(comando: str):
     init_mqtt()
     if comando.startswith("LED:"):
         limpiar_cola()
-    st.session_state.mqtt_client.publish(TOPIC_CMD, comando)
+    
+    info = st.session_state.mqtt_client.publish(TOPIC_CMD, comando, qos=1)
+    info.wait_for_publish(timeout=2.0)
 
 def leer_resultado():
     init_mqtt()
