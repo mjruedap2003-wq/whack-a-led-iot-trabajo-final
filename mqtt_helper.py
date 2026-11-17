@@ -1,11 +1,12 @@
 import paho.mqtt.client as mqtt
 import streamlit as st
 import queue
+import uuid
 
-BROKER = "broker.hivemq.com"
+BROKER = "test.mosquitto.org"
 PORT = 1883
-TOPIC_CMD = "eafit/whackaled/comando"
-TOPIC_RES = "eafit/whackaled/resultado"
+TOPIC_CMD = "miguel_whackaled_2026/comando"
+TOPIC_RES = "miguel_whackaled_2026/resultado"
 
 def init_mqtt():
     if "mqtt_client" not in st.session_state:
@@ -24,7 +25,8 @@ def init_mqtt():
                     pass
             msg_queue.put(payload)
 
-        client = mqtt.Client()
+        # Client ID único para Streamlit Cloud
+        client = mqtt.Client(client_id=f"Streamlit-Miguel-{uuid.uuid4().hex[:8]}")
         client.on_connect = on_connect
         client.on_message = on_message
         client.connect(BROKER, PORT, 60)
