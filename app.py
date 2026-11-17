@@ -17,7 +17,7 @@ if "desbloqueado" not in st.session_state:
 st.title("🕹️ Whack-a-LED / Topo IoT")
 st.markdown("Sistema multimodal conectado en tiempo real con **Wokwi (ESP32)** vía MQTT.")
 
-# Cargar modelo y etiquetas de Teachable Machine una sola vez
+# Cargar modelo y etiquetas de Teachable Machine
 @st.cache_resource
 def cargar_modelo_tm():
     modelo = keras.models.load_model("keras_model.h5", compile=False)
@@ -31,13 +31,12 @@ except Exception as e:
     st.error(f"Error cargando keras_model.h5 o labels.txt. Verifica que estén en la raíz de GitHub. Detalle: {e}")
     st.stop()
 
-st.subheader("Paso 1: Desbloqueo Biométrico 😊")
-st.info("Tómate una foto sonriendo (modelo entrenado en Teachable Machine) para desbloquear el tablero en Wokwi.")
+st.subheader("Paso 1: Control por Gestos 👍👎")
+st.info("Haz **Pulgar Arriba (👍)** frente a la cámara para desbloquear Wokwi, o **Pulgar Abajo (👎)** para bloquearlo.")
 
-foto = st.camera_input("Activa tu cámara y sonríe")
+foto = st.camera_input("Muestra tu gesto a la cámara")
 
-def predecir_expresion(imagen_pil):
-    # Teachable Machine requiere imágenes RGB de 224x224 normalizadas entre -1 y 1
+def predecir_gesto(imagen_pil):
     size = (224, 224)
     image = ImageOps.fit(imagen_pil.convert("RGB"), size, Image.Resampling.LANCZOS)
     image_array = np.asarray(image)
@@ -51,23 +50,27 @@ def predecir_expresion(imagen_pil):
     clase_raw = etiquetas[indice]
     confianza = float(prediccion[0][indice])
     
-    # Limpiar el número inicial de labels.txt (ej. "0 Feliz" -> "Feliz")
+    # Limpiar el índice inicial de labels.txt (ej. "0 Pulgar_arriba" -> "Pulgar_arriba")
     nombre_clase = clase_raw.split(" ", 1)[1] if " " in clase_raw else clase_raw
     return nombre_clase, confianza
 
 if foto is not None:
     img = Image.open(foto)
-    clase_detectada, confianza = predecir_expresion(img)
+    gesto_detectado, confianza = predecir_gesto(img)
+    gesto_norm = gesto_detectado.lower().replace(" ", "_")
 
-    # Verifica si la clase ganadora es "Feliz" (sin importar mayúsculas/minúsculas) con al menos 70% de confianza
-    if "feliz" in clase_detectada.lower() and confianza >= 0.70:
+    if "pulgar_arriba" in gesto_norm and confianza >= 0.70:
         st.session_state.desbloqueado = True
         enviar_comando("UNLOCK")
-        st.success(f"¡Expresión detectada: **{clase_detectada}** ({confianza*100:.1f}%)! Tablero Wokwi desbloqueado.")
-    else:
+        st.success(f"👍 Gesto detectado: **{gesto_detectado}** ({confianza*100:.1f}%). ¡Tablero Wokwi desbloqueado!")
+    
+    elif "pulgar_abajo" in gesto_norm and confianza >= 0.70:
         st.session_state.desbloqueado = False
         enviar_comando("LOCK")
-        st.warning(f"Detectado: **{clase_detectada}** ({confianza*100:.1f}%). Necesitas sonreír para desbloquear.")
+        st.error(f"👎 Gesto detectado: **{gesto_detectado}** ({confianza*100:.1f}%). Tablero Wokwi bloqueado.")
+    
+    else:
+        st.warning(f"🖐️ Detectado: **{gesto_detectado}** ({confianza*100:.1f}%). Haz un **Pulgar Arriba 👍** claro para habilitar el juego.")
 
 st.divider()
 
@@ -78,9 +81,9 @@ if st.session_state.desbloqueado:
     1. **1 Modo Voz:** Controla qué topo aparece mediante comandos de voz y golpéalo en Wokwi.
     2. **2 Modo Visual:** Asocia imágenes en pantalla con los botones físicos de colores en Wokwi.
     """)
-    if st.button("🔒 Bloquear juego nuevamente"):
+    if st.button("🔒 Bloquear juego manualmente"):
         st.session_state.desbloqueado = False
         enviar_comando("LOCK")
         st.rerun()
 else:
-    st.error("🔒 **Estado del sistema: BLOQUEADO** (Sonríe arriba para jugar)")
+    st.error("🔒 **Estado del sistema: BLOQUEADO** (Haz Pulgar Arriba 👍 arriba para jugar)")
