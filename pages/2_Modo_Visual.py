@@ -10,7 +10,7 @@ if not st.session_state.get("desbloqueado", False):
     st.warning("⚠️ SYSTEM LOCKED: Ve a la pantalla principal y haz Pulgar Arriba 👍.")
     st.stop()
 
-banner_arcade("LEVEL 2 • RÁFAGA VISUAL ACUMULATIVA")
+banner_arcade("LEVEL 2 • CAZA VISUAL DE TOPOS")
 st.title("MODO VISUAL")
 
 ELEMENTOS = [
@@ -32,9 +32,9 @@ if "historial_visual" not in st.session_state:
 col1, col2, col3 = st.columns(3)
 col1.metric("SCORE VISUAL", f"{st.session_state.puntos_visual:04d}")
 col2.metric("SCORE GLOBAL", f"{st.session_state.puntaje_total:04d}")
-col3.metric("VALOR CLIC", "15 PTS")
+col3.metric("PUNTOS / GOLPE", "+15 PTS")
 
-if st.button("🎲 LANZAR RETO DE 3 SEGUNDOS A WOKWI"):
+if st.button("🎲 ENCENDER OBJETIVO EN WOKWI"):
     st.session_state.objetivo_visual = random.choice(ELEMENTOS)
     enviar_comando(f"LED:{st.session_state.objetivo_visual['idx']}")
     st.rerun()
@@ -44,7 +44,7 @@ st.markdown(f"""
 <div style="background: linear-gradient(145deg, {obj['color']}25, #0d0f24); border: 3px solid {obj['color']}; border-radius: 18px; padding: 30px; text-align: center; box-shadow: 0 0 30px {obj['color']}66; margin: 15px 0;">
     <div style="font-size: 85px; line-height: 1.1; filter: drop-shadow(0 0 15px {obj['color']});">{obj['icono']}</div>
     <h2 style="color: {obj['color']} !important; margin: 15px 0 5px 0;">{obj['nombre']}</h2>
-    <p style="color: #cbd5e1; margin: 0;">¡Tienes <b>3 segundos</b> en Wokwi para darle todos los clics posibles!</p>
+    <p style="color: #cbd5e1; margin: 0;">Presiona el botón correspondiente en Wokwi para apagar el LED.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -54,29 +54,27 @@ with st.expander("👾 Personalizar Skin del Topo (Subir Imagen)"):
         st.image(avatar, caption="SKIN EQUIPADA", width=140)
 
 st.divider()
-if st.button("✅ SUMAR PUNTAJE DE LA RONDA"):
+if st.button("✅ SUMAR PUNTOS AL MARCADOR"):
     res = leer_resultado()
-    if res is not None and ":" in res:
-        color_idx, clicks = map(int, res.split(":"))
-        ganados = clicks * 15
+    if res is not None and ":OK" in res:
+        color_idx = int(res.split(":")[0])
+        ganados = 15
         
         st.session_state.puntos_visual += ganados
         st.session_state.puntaje_total += ganados
         
         el_info = ELEMENTOS[color_idx]
-        st.session_state.historial_visual.append(f"{el_info['icono']} {el_info['nombre']}: {clicks} clics (+{ganados} pts)")
+        st.session_state.historial_visual.append(f"{el_info['icono']} {el_info['nombre']} apagado (+{ganados} pts)")
         
-        if clicks > 0:
-            st.balloons()
-            st.success(f"💥 +{ganados} PTS sumados ({clicks} clics). ¡Total acumulado: {st.session_state.puntos_visual} PTS!")
-        else:
-            st.warning("⏱️ 0 clics registrados en los 3 segundos. ¡Lanza otro reto!")
+        # Prepara automáticamente el siguiente objetivo
+        st.session_state.objetivo_visual = random.choice(ELEMENTOS)
+        st.balloons()
         st.rerun()
     else:
-        st.info("Lanza un reto, haz todos los clics que puedas en Wokwi durante 3 segundos y luego suma tu puntaje.")
+        st.info("Presiona primero el botón físico en Wokwi para apagar el LED encendido.")
 
 if st.session_state.historial_visual:
-    with st.expander("📜 Historial de rondas acumuladas", expanded=True):
+    with st.expander("📜 Historial de objetivos eliminados", expanded=True):
         for item in reversed(st.session_state.historial_visual):
             st.write(item)
         if st.button("🔄 Reiniciar marcador de Modo Visual"):
