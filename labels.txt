@@ -1,0 +1,3 @@
+0 Pulgar_arriba
+1 Pulgar_abajo
+2 Nada
