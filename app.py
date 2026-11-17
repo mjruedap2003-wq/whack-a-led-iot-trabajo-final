@@ -1,26 +1,27 @@
 import os
-# Forzar compatibilidad de Keras para modelos exportados desde Teachable Machine
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
 import streamlit as st
 import numpy as np
 from PIL import Image, ImageOps
-import tf_keras as keras
+import tensorflow as tf
 from mqtt_helper import init_mqtt, enviar_comando
+from ui_arcade import aplicar_estilo_arcade, banner_arcade
 
-st.set_page_config(page_title="Whack-a-LED IoT", page_icon="🕹️", layout="centered")
+st.set_page_config(page_title="Whack-a-LED Arcade IoT", page_icon="🕹️", layout="centered")
+aplicar_estilo_arcade()
 init_mqtt()
 
 if "desbloqueado" not in st.session_state:
     st.session_state.desbloqueado = False
 
-st.title("🕹️ Whack-a-LED / Topo IoT")
-st.markdown("Sistema multimodal conectado en tiempo real con **Wokwi (ESP32)** vía MQTT.")
+banner_arcade("PLAYER 1 READY • CONECTADO A ESP32 WOKWI")
+st.title("WHACK-A-LED ARCADE")
+st.markdown("<p style='text-align:center; color:#94a3b8;'>CONTROL MULTIMODAL EN TIEMPO REAL VÍA MQTT</p>", unsafe_allow_html=True)
 
-# Cargar modelo y etiquetas de Teachable Machine
 @st.cache_resource
 def cargar_modelo_tm():
-    modelo = keras.models.load_model("keras_model.h5", compile=False)
+    modelo = tf.keras.models.load_model("keras_model.h5", compile=False)
     with open("labels.txt", "r", encoding="utf-8") as f:
         etiquetas = [line.strip() for line in f.readlines()]
     return modelo, etiquetas
@@ -28,13 +29,13 @@ def cargar_modelo_tm():
 try:
     modelo, etiquetas = cargar_modelo_tm()
 except Exception as e:
-    st.error(f"Error cargando keras_model.h5 o labels.txt. Verifica que estén en la raíz de GitHub. Detalle: {e}")
+    st.error(f"Error cargando modelo: {e}")
     st.stop()
 
-st.subheader("Paso 1: Control por Gestos 👍👎")
-st.info("Haz **Pulgar Arriba (👍)** frente a la cámara para desbloquear Wokwi, o **Pulgar Abajo (👎)** para bloquearlo.")
+st.subheader("📷 Escáner Biométrico de Acceso")
+st.markdown("Haz **👍 PULGAR ARRIBA** para encender la máquina o **👎 PULGAR ABAJO** para bloquearla.")
 
-foto = st.camera_input("Muestra tu gesto a la cámara")
+foto = st.camera_input("ESCÁNER DE GESTOS")
 
 def predecir_gesto(imagen_pil):
     size = (224, 224)
@@ -50,7 +51,6 @@ def predecir_gesto(imagen_pil):
     clase_raw = etiquetas[indice]
     confianza = float(prediccion[0][indice])
     
-    # Limpiar el índice inicial de labels.txt (ej. "0 Pulgar_arriba" -> "Pulgar_arriba")
     nombre_clase = clase_raw.split(" ", 1)[1] if " " in clase_raw else clase_raw
     return nombre_clase, confianza
 
@@ -62,28 +62,33 @@ if foto is not None:
     if "pulgar_arriba" in gesto_norm and confianza >= 0.70:
         st.session_state.desbloqueado = True
         enviar_comando("UNLOCK")
-        st.success(f"👍 Gesto detectado: **{gesto_detectado}** ({confianza*100:.1f}%). ¡Tablero Wokwi desbloqueado!")
-    
+        st.success(f"👍 GESTO VALIDADO: {gesto_detectado.upper()} ({confianza*100:.1f}%) — ¡SISTEMA ONLINE!")
     elif "pulgar_abajo" in gesto_norm and confianza >= 0.70:
         st.session_state.desbloqueado = False
         enviar_comando("LOCK")
-        st.error(f"👎 Gesto detectado: **{gesto_detectado}** ({confianza*100:.1f}%). Tablero Wokwi bloqueado.")
-    
+        st.error(f"👎 GESTO VALIDADO: {gesto_detectado.upper()} ({confianza*100:.1f}%) — SISTEMA BLOQUEADO")
     else:
-        st.warning(f"🖐️ Detectado: **{gesto_detectado}** ({confianza*100:.1f}%). Haz un **Pulgar Arriba 👍** claro para habilitar el juego.")
+        st.warning(f"🖐️ LECTURA: {gesto_detectado.upper()} ({confianza*100:.1f}%) — HAZ PULGAR ARRIBA 👍")
 
 st.divider()
 
 if st.session_state.desbloqueado:
-    st.success("🔓 **Estado del sistema: DESBLOQUEADO**")
     st.markdown("""
-    👈 **Abre el menú lateral izquierdo y elige tu ambiente de juego:**
-    1. **1 Modo Voz:** Controla qué topo aparece mediante comandos de voz y golpéalo en Wokwi.
-    2. **2 Modo Visual:** Asocia imágenes en pantalla con los botones físicos de colores en Wokwi.
-    """)
-    if st.button("🔒 Bloquear juego manualmente"):
+    <div style="border: 2px solid #39ff14; background: rgba(57, 255, 20, 0.1); border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 0 20px rgba(57, 255, 20, 0.3);">
+        <h3 style="color: #39ff14 !important; margin-top: 0;">🟢 TABLERO DESBLOQUEADO</h3>
+        <p style="font-size: 0.95rem;">Abre el menú lateral izquierdo y selecciona tu nivel:</p>
+        <p><b>🎙️ LEVEL 1: MODO VOZ</b> &nbsp;|&nbsp; <b>🖼️ LEVEL 2: MODO VISUAL</b></p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.write("")
+    if st.button("🔒 BLOQUEAR GABINETE"):
         st.session_state.desbloqueado = False
         enviar_comando("LOCK")
         st.rerun()
 else:
-    st.error("🔒 **Estado del sistema: BLOQUEADO** (Haz Pulgar Arriba 👍 arriba para jugar)")
+    st.markdown("""
+    <div style="border: 2px solid #ff007f; background: rgba(255, 0, 127, 0.1); border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 0 20px rgba(255, 0, 127, 0.3);">
+        <h3 style="color: #ff007f !important; margin-top: 0;">🔴 SYSTEM LOCKED</h3>
+        <p style="margin-bottom: 0;">Muestra el <b>Pulgar Arriba 👍</b> en la cámara para iniciar partida</p>
+    </div>
+    """, unsafe_allow_html=True)
