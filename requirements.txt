@@ -1,6 +1,7 @@
 streamlit
 paho-mqtt
-mediapipe
+tensorflow-cpu
+tf-keras
 numpy
 Pillow
 SpeechRecognition
